@@ -29,34 +29,6 @@ const scaleMarker = document.querySelector("#scale-marker");
 const loPassedInput = document.querySelector("#lo-passed");
 const loPassedError = document.querySelector("#lo-passed-error");
 const lopGradePoint = document.querySelector("#lop-grade-point");
-const lopEntry = document.querySelector(".lop-entry");
-const loPassedLabel = lopEntry.querySelector('label[for="lo-passed"]');
-const loPassedDenominator = lopEntry.querySelector(".count-control span");
-
-// Collect the course's LO total before accepting a completed-LO count.
-const loTotalLabel = document.createElement("label");
-loTotalLabel.className = "lo-total-field";
-loTotalLabel.htmlFor = "lo-total";
-loTotalLabel.textContent = "Total number of learning outcomes";
-const loTotalInput = document.createElement("input");
-loTotalInput.id = "lo-total";
-loTotalInput.name = "lo-total";
-loTotalInput.type = "number";
-loTotalInput.min = "1";
-loTotalInput.step = "1";
-loTotalInput.inputMode = "numeric";
-loTotalInput.autocomplete = "off";
-loTotalInput.setAttribute("aria-describedby", "lo-total-error");
-loTotalLabel.append(loTotalInput);
-const loTotalError = document.createElement("p");
-loTotalError.className = "field-error";
-loTotalError.id = "lo-total-error";
-loTotalError.setAttribute("aria-live", "polite");
-lopEntry.prepend(loTotalError);
-lopEntry.prepend(loTotalLabel);
-loPassedLabel.textContent = "How many learning outcomes did you complete?";
-loPassedDenominator.textContent = "/ enter total above";
-document.querySelector("#lo-reference-title").textContent = "LOs passed (scaled to 10) → grade points";
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -67,17 +39,14 @@ function toSafeNumber(value, fallback = 0) {
   return Number.isFinite(numericValue) ? numericValue : fallback;
 }
 
-function getLopGradePoint(passed, total) {
-  // Preserve the syllabus's 10-LO grade-point table while scaling it to the
-  // number of learning outcomes in this course.
-  const equivalentPassed = Math.floor((passed / total) * 10 + Number.EPSILON);
-  if (equivalentPassed <= 3) return 0;
-  if (equivalentPassed === 4) return 0.5;
-  if (equivalentPassed === 5) return 1;
-  if (equivalentPassed === 6) return 1.5;
-  if (equivalentPassed === 7) return 2;
-  if (equivalentPassed === 8) return 3;
-  if (equivalentPassed === 9) return 3.5;
+function getLopGradePoint(passed) {
+  if (passed <= 3) return 0;
+  if (passed === 4) return 0.5;
+  if (passed === 5) return 1;
+  if (passed === 6) return 1.5;
+  if (passed === 7) return 2;
+  if (passed === 8) return 3;
+  if (passed === 9) return 3.5;
   return 4;
 }
 
@@ -110,41 +79,18 @@ function renderResults() {
 }
 
 function updateLop() {
-  const total = Number(loTotalInput.value);
-  const totalIsValid = loTotalInput.value !== "" && Number.isInteger(total) && total > 0;
+  const parsed = Number(loPassedInput.value);
+  const isValid = loPassedInput.value !== "" && Number.isInteger(parsed) && parsed >= 0 && parsed <= 10;
 
-  if (!totalIsValid) {
-    loTotalError.textContent = "Enter the total number of learning outcomes (a whole number greater than 0).";
-    loTotalInput.setAttribute("aria-invalid", "true");
-    loPassedDenominator.textContent = "/ enter total above";
-    loPassedInput.removeAttribute("max");
-    loPassedError.textContent = "Enter the total number of LOs first.";
+  if (!isValid) {
+    loPassedError.textContent = "Enter a whole number from 0 to 10.";
     loPassedInput.setAttribute("aria-invalid", "true");
-    state.gradePoints.lop = 0;
-    lopGradePoint.textContent = "0.0";
-    renderResults();
-    return;
-  }
-
-  loTotalError.textContent = "";
-  loTotalInput.removeAttribute("aria-invalid");
-  loPassedDenominator.textContent = `/ ${total}`;
-  loPassedInput.max = String(total);
-
-  const passed = Number(loPassedInput.value);
-  const passedIsValid = loPassedInput.value !== "" && Number.isInteger(passed) && passed >= 0 && passed <= total;
-  if (!passedIsValid) {
-    loPassedError.textContent = `Enter a whole number from 0 to ${total}.`;
-    loPassedInput.setAttribute("aria-invalid", "true");
-    state.gradePoints.lop = 0;
-    lopGradePoint.textContent = "0.0";
-    renderResults();
     return;
   }
 
   loPassedError.textContent = "";
   loPassedInput.removeAttribute("aria-invalid");
-  const points = getLopGradePoint(passed, total);
+  const points = getLopGradePoint(parsed);
   state.gradePoints.lop = points;
   lopGradePoint.textContent = points.toFixed(1);
   renderResults();
@@ -237,11 +183,12 @@ assessmentCategories.forEach((category) => {
   renderMarkFields(category, card, 0);
 });
 
-loTotalInput.addEventListener("input", updateLop);
 loPassedInput.addEventListener("input", updateLop);
 loPassedInput.addEventListener("blur", () => {
-  if (loPassedInput.value === "" && loTotalInput.value !== "") {
+  if (loPassedInput.value === "" || loPassedInput.getAttribute("aria-invalid") === "true") {
     loPassedInput.value = "0";
+    loPassedError.textContent = "";
+    loPassedInput.removeAttribute("aria-invalid");
     updateLop();
   }
 });
@@ -249,15 +196,9 @@ loPassedInput.addEventListener("blur", () => {
 document.querySelector("#ogpa-form").addEventListener("reset", () => {
   window.requestAnimationFrame(() => {
     state.gradePoints = Object.fromEntries(components.map(({ id }) => [id, 0]));
-    loTotalInput.value = "";
-    loPassedInput.value = "0";
-    loTotalError.textContent = "";
-    loPassedError.textContent = "";
-    loTotalInput.removeAttribute("aria-invalid");
-    loPassedInput.removeAttribute("aria-invalid");
-    loPassedDenominator.textContent = "/ enter total above";
-    loPassedInput.removeAttribute("max");
     lopGradePoint.textContent = "0.0";
+    loPassedError.textContent = "";
+    loPassedInput.removeAttribute("aria-invalid");
 
     assessmentCategories.forEach((category) => {
       const card = document.querySelector(`[data-category="${category.id}"]`);
