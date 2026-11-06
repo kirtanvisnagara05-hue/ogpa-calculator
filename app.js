@@ -34,6 +34,11 @@ function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function toSafeNumber(value, fallback = 0) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+}
+
 function getLopGradePoint(passed) {
   if (passed <= 3) return 0;
   if (passed === 4) return 0.5;
@@ -92,12 +97,13 @@ function updateLop() {
 }
 
 function updateCategory(category, card) {
-  const scores = state.scores[category.id];
+  const scores = state.scores[category.id].map((value) => toSafeNumber(value, 0));
   const obtained = scores.reduce((sum, value) => sum + value, 0);
   const total = scores.length * category.maximum;
   const percentage = total > 0 ? (obtained / total) * 100 : 0;
   const points = total > 0 ? clamp((obtained / total) * 4, 0, 4) : 0;
 
+  state.scores[category.id] = scores;
   state.gradePoints[category.id] = points;
   card.querySelector(".marks-summary").textContent = `${obtained.toFixed(1)} / ${total} marks · ${percentage.toFixed(1)}%`;
   card.querySelector(".points-summary").textContent = `${points.toFixed(2)} / 4`;
@@ -147,7 +153,7 @@ function createMarkField(category, card, index) {
 
 function renderMarkFields(category, card, count) {
   const marksGrid = card.querySelector(".marks-grid");
-  const existing = state.scores[category.id];
+  const existing = state.scores[category.id].map((value) => toSafeNumber(value, 0));
   state.scores[category.id] = Array.from({ length: count }, (_, index) => existing[index] ?? 0);
   marksGrid.replaceChildren(...state.scores[category.id].map((_, index) => createMarkField(category, card, index)));
   updateCategory(category, card);
@@ -178,6 +184,14 @@ assessmentCategories.forEach((category) => {
 });
 
 loPassedInput.addEventListener("input", updateLop);
+loPassedInput.addEventListener("blur", () => {
+  if (loPassedInput.value === "" || loPassedInput.getAttribute("aria-invalid") === "true") {
+    loPassedInput.value = "0";
+    loPassedError.textContent = "";
+    loPassedInput.removeAttribute("aria-invalid");
+    updateLop();
+  }
+});
 
 document.querySelector("#ogpa-form").addEventListener("reset", () => {
   window.requestAnimationFrame(() => {
